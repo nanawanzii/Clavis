@@ -12,16 +12,49 @@ use typst::text::{Font, FontBook};
 use typst::Library;
 use typst::World;
 
-static FONTS: Lazy<(Prehashed<FontBook>, Vec<Font>)> = Lazy::new(|| {
+enum FontSlot {
+    Embedded {
+        buffer: Bytes,
+        index: u32,
+        font: once_cell::sync::OnceCell<Option<Font>>,
+    },
+    System {
+        path: std::path::PathBuf,
+        index: u32,
+        font: once_cell::sync::OnceCell<Option<Font>>,
+    },
+}
+
+impl FontSlot {
+    fn get(&self) -> Option<Font> {
+        match self {
+            FontSlot::Embedded { buffer, index, font } => {
+                font.get_or_init(|| Font::new(buffer.clone(), *index)).clone()
+            }
+            FontSlot::System { path, index, font } => {
+                font.get_or_init(|| {
+                    let bytes = std::fs::read(path).ok()?;
+                    Font::new(Bytes::from(bytes), *index)
+                }).clone()
+            }
+        }
+    }
+}
+
+static FONTS: Lazy<(Prehashed<FontBook>, Vec<FontSlot>)> = Lazy::new(|| {
     let mut book = FontBook::new();
-    let mut fonts: Vec<Font> = Vec::new();
+    let mut slots: Vec<FontSlot> = Vec::new();
 
     // 1) Embedded fonts shipped with typst-assets (Latin & math coverage).
     for data in typst_assets::fonts() {
         let buffer = Bytes::from_static(data);
-        for font in Font::iter(buffer) {
+        for font in Font::iter(buffer.clone()) {
             book.push(font.info().clone());
-            fonts.push(font);
+            slots.push(FontSlot::Embedded {
+                buffer: buffer.clone(),
+                index: font.index(),
+                font: once_cell::sync::OnceCell::new(),
+            });
         }
     }
 
@@ -37,15 +70,23 @@ static FONTS: Lazy<(Prehashed<FontBook>, Vec<Font>)> = Lazy::new(|| {
             fontdb::Source::File(p) => p.clone(),
             _ => continue, // skip in-memory or shared faces
         };
-        let Ok(bytes) = std::fs::read(&path) else { continue };
-        let buffer = Bytes::from(bytes);
-        for font in Font::iter(buffer) {
-            book.push(font.info().clone());
-            fonts.push(font);
+        let Ok(file) = std::fs::File::open(&path) else { continue };
+        if let Ok(mmap) = unsafe { memmap2::Mmap::map(&file) } {
+            let count = ttf_parser::fonts_in_collection(&mmap).unwrap_or(1);
+            for index in 0..count {
+                if let Some(info) = typst::text::FontInfo::new(&mmap, index) {
+                    book.push(info);
+                    slots.push(FontSlot::System {
+                        path: path.clone(),
+                        index,
+                        font: once_cell::sync::OnceCell::new(),
+                    });
+                }
+            }
         }
     }
 
-    (Prehashed::new(book), fonts)
+    (Prehashed::new(book), slots)
 });
 
 static LIBRARY: Lazy<Prehashed<Library>> =
@@ -95,7 +136,7 @@ impl World for SimpleWorld {
     }
 
     fn font(&self, index: usize) -> Option<Font> {
-        FONTS.1.get(index).cloned()
+        FONTS.1.get(index).and_then(|slot| slot.get())
     }
 
     fn today(&self, _offset: Option<i64>) -> Option<Datetime> {

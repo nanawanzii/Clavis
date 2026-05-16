@@ -193,6 +193,12 @@ fn scan_folder_shallow(root: String) -> Result<TreeNode, String> {
 }
 
 fn main() {
+    // Eagerly initialize Typst fonts in a background thread so it doesn't block the UI
+    // or the first render call from freezing the app on startup.
+    std::thread::spawn(|| {
+        let _ = typst_world::list_fonts();
+    });
+
     let state = Arc::new(AppState::default());
     let latex_state = latex::LatexState::default();
 

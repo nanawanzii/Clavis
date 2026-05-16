@@ -30,13 +30,16 @@ base64 = "0.22"
 tokio = { version = "1", features = ["process", "io-util", "rt", "macros", "time", "sync"] }
 regex = "1"
 uuid = { version = "1", features = ["v4"] }
+memmap2 = "0.9.10"
+ttf-parser = "0.25.1"
 
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
 [profile.release]
-opt-level = 3
-lto = false
-codegen-units = 16
-strip = true
+opt-level = "s"       # Optimize for binary size (lowers memory footprint)
+lto = true            # Link-time optimization (whole program analysis)
+codegen-units = 1     # Maximizes LTO effectiveness
+panic = "abort"       # Removes panic unwinding infrastructure
+strip = true          # Removes debug symbols
