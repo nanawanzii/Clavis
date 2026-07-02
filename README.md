@@ -11,11 +11,7 @@ Clavis 是一个基于 Tauri 的桌面文档编辑器，支持 Markdown、LaTeX 
 - 多标签、文件夹浏览、命令面板、快捷键
 - 项目本地字体、资源文件自动打包到编译目录
 
-## 安装（预编译版）
 
-- macOS Apple Silicon: 下载 Release 里的 `Clavis_1.0.0_aarch64.dmg`
-
-其他平台目前需要从源码构建。
 
 ## 从源码构建
 
