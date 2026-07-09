@@ -7,7 +7,9 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Tauri v1 needs webkit2gtk-4.0, which was removed in Ubuntu 24.04
+    # (ubuntu-latest). Pin to 22.04, where the 4.0 dev package still exists.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
